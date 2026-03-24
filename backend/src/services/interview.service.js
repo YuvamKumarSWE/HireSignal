@@ -1,6 +1,5 @@
 import { getRandomVoice } from './elevenlabs.service.js';
-
-const API_KEY = process.env.GEMINI_API_KEY;
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // In-memory storage for interview sessions (use database in production)
 const interviewSessions = new Map();
@@ -45,8 +44,14 @@ const MOCK_QUESTIONS = [
  * @returns {Array} Array of interview questions
  */
 export async function generateInterviewQuestions(jobSpec) {
+  const API_KEY = process.env.GEMINI_API_KEY;
   const { role, level, jobDescription, company } = jobSpec;
-  
+
+  if (!API_KEY) {
+    console.warn("GEMINI_API_KEY is not set, using mock questions");
+    return MOCK_QUESTIONS;
+  }
+
   const prompt = `
 You are an expert interviewer. Generate 5 basic interview questions for a ${level || 'Mid-level'} ${role || 'Software Engineer'} position${company ? ` at ${company}` : ''}.
 
@@ -80,46 +85,19 @@ Return ONLY valid JSON in this exact format:
 Make questions natural and conversational. Include the question text only, no additional instructions.
 `;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    }
-  );
-
-  const data = await response.json();
-  
-  // Debug logging
-  if (!response.ok) {
-    console.error("Gemini API Error:", data);
-    console.log("⚠️  Using mock questions as fallback");
-    return MOCK_QUESTIONS;
-  }
-  
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    console.error("No text in Gemini response:", JSON.stringify(data, null, 2));
-    console.log("⚠️  Using mock questions as fallback");
-    return MOCK_QUESTIONS;
-  }
-
   try {
-    // Extract JSON from markdown code blocks if present
-    let jsonText = text;
-    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[1];
-    }
-    
-    const result = JSON.parse(jsonText);
-    return result.questions || [];
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash-preview-04-17",
+      generationConfig: { responseMimeType: "application/json" }
+    });
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const parsed = JSON.parse(text);
+    return parsed.questions || [];
   } catch (e) {
-    console.error("Raw Gemini output:", text);
+    console.error("Gemini API error:", e);
     console.log("⚠️  Using mock questions as fallback");
     return MOCK_QUESTIONS;
   }

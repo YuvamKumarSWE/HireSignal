@@ -3,35 +3,59 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { useNavigate } from 'react-router-dom';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+const ROLES = [
+    'Software Engineer',
+    'Frontend Engineer',
+    'Backend Engineer',
+    'Full Stack Engineer',
+    'Data Scientist',
+    'Machine Learning Engineer',
+    'DevOps Engineer',
+    'Product Manager',
+    'Designer',
+];
+
+const LEVELS = [
+    'Intern',
+    'Entry-level',
+    'Mid-level',
+    'Senior',
+    'Staff',
+    'Principal',
+    'Manager',
+];
+
 const Dashboard = () => {
     const [jobDescription, setJobDescription] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [role, setRole] = useState('Software Engineer');
+    const [level, setLevel] = useState('Mid-level');
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
-        
+
         try {
-            // Call your backend interview API
-            const response = await fetch('http://localhost:3000/api/interview/start', {
+            const response = await fetch(`${API_BASE}/api/interview/start`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    userId: 'user_' + Date.now(), // You can get this from auth later
-                    role: 'Software Engineer', // Parse from job description or add input field
-                    level: 'Mid-level', // Parse from job description or add input field
+                    userId: 'user_' + Date.now(),
+                    role,
+                    level,
                     jobDescription: jobDescription
                 })
             });
 
             const data = await response.json();
-            
+
             if (data.success) {
                 console.log('Interview started:', data);
-                // Navigate to interview page with sessionId and voice info
                 navigate(`/interview/${data.sessionId}`, {
                     state: {
                         voice: data.voice
@@ -77,6 +101,33 @@ const Dashboard = () => {
                     onSubmit={handleSubmit}
                     className="w-full relative"
                 >
+                    <div className="flex gap-6 mb-6">
+                        <div className="flex-1">
+                            <label className="block text-sm font-sans uppercase tracking-widest opacity-60 mb-2">Role</label>
+                            <select
+                                value={role}
+                                onChange={(e) => setRole(e.target.value)}
+                                className="w-full bg-[#F4F1E8] px-4 py-3 text-base font-sans rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] transition-all shadow-sm"
+                            >
+                                {ROLES.map((r) => (
+                                    <option key={r} value={r}>{r}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-sm font-sans uppercase tracking-widest opacity-60 mb-2">Level</label>
+                            <select
+                                value={level}
+                                onChange={(e) => setLevel(e.target.value)}
+                                className="w-full bg-[#F4F1E8] px-4 py-3 text-base font-sans rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] transition-all shadow-sm"
+                            >
+                                {LEVELS.map((l) => (
+                                    <option key={l} value={l}>{l}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
                     <div className="relative group">
                         <div className="absolute -inset-1 bg-gradient-to-r from-gray-200 to-gray-300 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
                         <textarea
@@ -87,7 +138,7 @@ Responsibilities:
 - Build modern web applications...
 Requirements:
 - 5+ years of React experience..."
-                            className="relative w-full h-[400px] bg-[#F4F1E8] p-8 text-lg font-mono rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] resize-none transition-all shadow-sm placeholder:opacity-30 placeholder:font-sans"
+                            className="relative w-full h-[360px] bg-[#F4F1E8] p-8 text-lg font-mono rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] resize-none transition-all shadow-sm placeholder:opacity-30 placeholder:font-sans"
                             required
                         />
                     </div>

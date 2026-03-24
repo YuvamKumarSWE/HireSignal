@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 
+const API_BASE = import.meta.env.VITE_API_URL || '${API_BASE}';
+
 const Interview = () => {
     const { sessionId } = useParams();
     const navigate = useNavigate();
@@ -37,7 +39,7 @@ const Interview = () => {
             setCurrentQuestion(null); // Clear the current question
 
             const res = await fetch(
-                `http://localhost:3000/api/interview/${sessionId}/end`,
+                `${API_BASE}/api/interview/${sessionId}/end`,
                 { method: "POST" }
             );
 
@@ -64,7 +66,7 @@ const Interview = () => {
         try {
             setIsLoading(true);
             console.log('📝 Fetching question...');
-            const response = await fetch(`http://localhost:3000/api/interview/${sessionId}/question`);
+            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/question`);
             const data = await response.json();
 
             if (data.completed) {
@@ -110,7 +112,7 @@ const Interview = () => {
     const playQuestionAudio = async () => {
         try {
             setIsPlayingAudio(true);
-            const response = await fetch(`http://localhost:3000/api/interview/${sessionId}/question/audio`);
+            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/question/audio`);
             const audioBlob = await response.blob();
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
@@ -172,7 +174,7 @@ const Interview = () => {
             formData.append('audio', audioBlob, 'answer.webm');
             formData.append('questionId', currentQuestion.questionId);
 
-            const response = await fetch(`http://localhost:3000/api/interview/${sessionId}/answer/audio`, {
+            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/answer/audio`, {
                 method: 'POST',
                 body: formData
             });
@@ -203,7 +205,7 @@ const Interview = () => {
 
         try {
             setIsLoading(true);
-            const response = await fetch(`http://localhost:3000/api/interview/${sessionId}/answer`, {
+            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/answer`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
