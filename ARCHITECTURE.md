@@ -333,24 +333,34 @@ Socket.io provides a persistent, bidirectional connection between the browser an
 
 ### How the connection works
 
-When `Interview.jsx` mounts, it opens a socket connection:
+When `Interview.jsx` mounts, it fetches the user's Firebase ID token and passes it in the socket handshake:
 
 ```js
 // frontend/src/Interview.jsx
-const socket = io(SOCKET_URL);            // opens WebSocket connection to backend
-socket.emit('join:session', { sessionId }); // tells server "I'm in this interview"
+const token = await auth.currentUser?.getIdToken();
+const socket = io(SOCKET_URL, { auth: { token } }); // token sent in handshake
+socket.emit('join:session', { sessionId });
 ```
 
-On the backend, the server adds that socket to a **room** named after the sessionId:
+On the backend, `join:session` validates the token before admitting the socket to the room:
 
 ```js
 // backend/src/socket/index.js
-socket.on('join:session', ({ sessionId }) => {
-  socket.join(sessionId);  // socket is now in room "session_1748234..."
+socket.on('join:session', async ({ sessionId }) => {
+  const token = socket.handshake.auth?.token;
+  const decoded = await firebaseAuth.verifyIdToken(token);
+  const session = getSession(sessionId);
+  if (!session || session.userId !== decoded.uid) {
+    socket.emit('error', { message: 'Access denied' });
+    return;
+  }
+  socket.join(sessionId); // only reached if token is valid and uid matches session owner
 });
 ```
 
 A **room** is a named group. When the backend does `io.to(sessionId).emit(...)`, the event goes to every socket in that room — in practice, just the one browser tab for that interview.
+
+CORS is restricted to `http://localhost:5173` (the Vite dev server) so only the frontend origin can establish a socket connection.
 
 ### Events used in HireSignal
 
@@ -360,7 +370,8 @@ A **room** is a named group. When the backend does `io.to(sessionId).emit(...)`,
 | Server → Client | `transcription:status` | `{ status: 'processing' }` | When audio answer is being transcribed |
 | Server → Client | `transcription:status` | `{ status: 'done', text: '...' }` | When transcription is complete |
 | Server → Client | `evaluation:complete` | `{ evaluation, transcript }` | When `POST /end` finishes — navigates the user to results |
-| Client → Server | `join:session` | `{ sessionId }` | On Interview mount |
+| Server → Client | `error` | `{ message }` | Token missing/invalid, or uid doesn't match session owner |
+| Client → Server | `join:session` | `{ sessionId }` | On Interview mount — requires valid token in handshake |
 | Client → Server | `leave:session` | `{ sessionId }` | On Interview unmount / tab close |
 
 ### Why push evaluation via Socket.io?
@@ -404,9 +415,11 @@ The backend keeps one timer per active session in a `Map<sessionId, setInterval>
    → frontend navigates to /interview/:sessionId
 
 3. Interview.jsx mounts
-   → opens Socket.io connection
-   → emits join:session
-   → backend starts 1-second timer, emitting interview:timer every tick
+   → fetches Firebase ID token
+   → opens Socket.io connection with token in handshake
+   → emits join:session { sessionId }
+   → backend verifies token, checks uid matches session.userId
+   → backend adds socket to session room, starts 1-second timer
    → frontend calls GET /api/interview/:sessionId/question
    → backend returns question 1 from Map
 

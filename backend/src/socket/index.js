@@ -1,15 +1,37 @@
 import { Server } from 'socket.io';
+import { getAuth } from '../config/firebase.js';
+import { getSession } from '../services/interview.service.js';
 
 let io;
 const sessionTimers = new Map();
 
 export function initSocket(httpServer) {
   io = new Server(httpServer, {
-    cors: { origin: '*', methods: ['GET', 'POST'] }
+    cors: { origin: 'http://localhost:5173', methods: ['GET', 'POST'] }
   });
 
   io.on('connection', (socket) => {
-    socket.on('join:session', ({ sessionId }) => {
+    socket.on('join:session', async ({ sessionId }) => {
+      const firebaseAuth = getAuth();
+      if (firebaseAuth) {
+        const token = socket.handshake.auth?.token;
+        if (!token) {
+          socket.emit('error', { message: 'Authentication required' });
+          return;
+        }
+        try {
+          const decoded = await firebaseAuth.verifyIdToken(token);
+          const session = getSession(sessionId);
+          if (!session || session.userId !== decoded.uid) {
+            socket.emit('error', { message: 'Access denied' });
+            return;
+          }
+        } catch {
+          socket.emit('error', { message: 'Invalid token' });
+          return;
+        }
+      }
+
       socket.join(sessionId);
       console.log(`Socket ${socket.id} joined session ${sessionId}`);
 

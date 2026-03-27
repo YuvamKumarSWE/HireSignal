@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { apiFetch, apiFetchMultipart, BASE } from './api';
+import { auth } from './firebase';
 
 const SOCKET_URL = BASE;
 
@@ -32,19 +33,27 @@ const Interview = () => {
     const socketRef = useRef(null);
 
     useEffect(() => {
-        const socket = io(SOCKET_URL);
-        socketRef.current = socket;
-        socket.emit('join:session', { sessionId });
-        socket.on('transcription:status', ({ status }) => {
-            setTranscriptionStatus(status);
-            if (status === 'done') setTimeout(() => setTranscriptionStatus(null), 2000);
-        });
-        socket.on('interview:timer', ({ elapsed }) => setElapsedTime(elapsed));
-        socket.on('evaluation:complete', ({ evaluation, transcript }) => {
-            if (!isFinishingRef.current) return;
-            navigate(`/results/${sessionId}`, { state: { evaluation, transcript } });
-        });
-        return () => { socket.emit('leave:session', { sessionId }); socket.disconnect(); };
+        (async () => {
+            const token = await auth.currentUser?.getIdToken();
+            const socket = io(SOCKET_URL, { auth: { token } });
+            socketRef.current = socket;
+            socket.emit('join:session', { sessionId });
+            socket.on('transcription:status', ({ status }) => {
+                setTranscriptionStatus(status);
+                if (status === 'done') setTimeout(() => setTranscriptionStatus(null), 2000);
+            });
+            socket.on('interview:timer', ({ elapsed }) => setElapsedTime(elapsed));
+            socket.on('evaluation:complete', ({ evaluation, transcript }) => {
+                if (!isFinishingRef.current) return;
+                navigate(`/results/${sessionId}`, { state: { evaluation, transcript } });
+            });
+        })();
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.emit('leave:session', { sessionId });
+                socketRef.current.disconnect();
+            }
+        };
     }, [sessionId, navigate]);
 
     const finishInterview = async () => {
