@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { io } from 'socket.io-client';
 
-const API_BASE = import.meta.env.VITE_API_URL || '${API_BASE}';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+};
 
 const Interview = () => {
     const { sessionId } = useParams();
@@ -20,9 +28,44 @@ const Interview = () => {
     const [isConnecting, setIsConnecting] = useState(true);
     const [retryCount, setRetryCount] = useState(0);
     const [voiceInfo, setVoiceInfo] = useState(location.state?.voice || null);
+    const [transcriptionStatus, setTranscriptionStatus] = useState(null); // null | 'processing' | 'done'
+    const [elapsedTime, setElapsedTime] = useState(0);
     const MAX_RETRIES = 5;
     const RETRY_DELAY = 2000; // 2 seconds
     const isFinishingRef = useRef(false); // Prevent duplicate finish calls
+    const socketRef = useRef(null);
+
+    // Socket.io connection
+    useEffect(() => {
+        const socket = io(SOCKET_URL);
+        socketRef.current = socket;
+
+        socket.emit('join:session', { sessionId });
+
+        socket.on('transcription:status', ({ status, text }) => {
+            setTranscriptionStatus(status);
+            if (status === 'done') {
+                setTimeout(() => setTranscriptionStatus(null), 2000);
+            }
+        });
+
+        socket.on('interview:timer', ({ elapsed }) => {
+            setElapsedTime(elapsed);
+        });
+
+        socket.on('evaluation:complete', ({ evaluation, transcript }) => {
+            // Evaluation pushed via WebSocket — navigate if not already navigating
+            if (!isFinishingRef.current) return;
+            navigate(`/results/${sessionId}`, {
+                state: { evaluation, transcript }
+            });
+        });
+
+        return () => {
+            socket.emit('leave:session', { sessionId });
+            socket.disconnect();
+        };
+    }, [sessionId]);
 
     const finishInterview = async () => {
         // Prevent duplicate calls
@@ -307,6 +350,11 @@ const Interview = () => {
                             <span className="opacity-50">({voiceInfo.gender})</span>
                         </div>
                     )}
+                    {elapsedTime > 0 && (
+                        <div className="text-sm font-mono opacity-50 tabular-nums">
+                            {formatTime(elapsedTime)}
+                        </div>
+                    )}
                     {currentQuestion && (
                         <div className="text-sm opacity-60">
                             Question {currentQuestion.questionNumber} of {currentQuestion.totalQuestions}
@@ -364,7 +412,15 @@ const Interview = () => {
                                 className="w-full text-center"
                             >
                                 <div className="mb-8">
-                                    {isRecording ? (
+                                    {transcriptionStatus === 'processing' ? (
+                                        <div className="flex flex-col items-center gap-6">
+                                            <div className="w-32 h-32 bg-[#1A1A1A] rounded-full flex items-center justify-center animate-pulse">
+                                                <span className="text-6xl">✦</span>
+                                            </div>
+                                            <p className="text-xl font-bold">Transcribing your answer...</p>
+                                            <p className="text-sm opacity-40">Processing via ElevenLabs</p>
+                                        </div>
+                                    ) : isRecording ? (
                                         <div className="flex flex-col items-center gap-6">
                                             <div className="w-32 h-32 bg-red-500 rounded-full animate-pulse flex items-center justify-center">
                                                 <span className="text-6xl">🎤</span>

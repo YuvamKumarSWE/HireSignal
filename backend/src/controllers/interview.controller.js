@@ -9,6 +9,7 @@ import {
 } from '../services/interview.service.js';
 import { textToSpeech, speechToText } from '../services/elevenlabs.service.js';
 import { evaluateWithGemini } from '../services/gemini.service.js';
+import { getIO } from '../socket/index.js';
 
 /**
  * Start a new interview session
@@ -167,8 +168,15 @@ export async function submitAudioAnswer(req, res) {
       return res.status(400).json({ error: 'Audio file is required' });
     }
 
+    // Notify client that transcription is in progress
+    const io = getIO();
+    if (io) io.to(sessionId).emit('transcription:status', { status: 'processing' });
+
     // Convert audio to text
     const transcribedText = await speechToText(req.file.buffer);
+
+    // Notify client transcription is done
+    if (io) io.to(sessionId).emit('transcription:status', { status: 'done', text: transcribedText });
 
     // Submit the transcribed answer
     const result = submitAnswer(sessionId, questionId, transcribedText, 'audio');
@@ -267,6 +275,10 @@ export async function endInterview(req, res) {
       role: session.jobSpec.role,
       level: session.jobSpec.level
     });
+
+    // Push evaluation to client via WebSocket
+    const io = getIO();
+    if (io) io.to(sessionId).emit('evaluation:complete', { evaluation, transcript });
 
     res.json({
       success: true,
