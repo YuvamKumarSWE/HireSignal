@@ -7,7 +7,7 @@ const sessionTimers = new Map();
 
 export function initSocket(httpServer) {
   io = new Server(httpServer, {
-    cors: { origin: 'http://localhost:5173', methods: ['GET', 'POST'] }
+    cors: { origin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173', methods: ['GET', 'POST'] }
   });
 
   io.on('connection', (socket) => {
