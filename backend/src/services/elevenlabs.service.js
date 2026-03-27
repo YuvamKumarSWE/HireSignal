@@ -1,5 +1,4 @@
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
-import { Readable } from 'stream';
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
@@ -134,20 +133,5 @@ export async function speechToText(audioBuffer, languageCode = null) {
   } catch (error) {
     console.error('ElevenLabs Speech to Text Error:', error.response?.data || error.message);
     throw new Error('Failed to convert speech to text');
-  }
-}
-
-/**
- * Get available voices from ElevenLabs
- * @returns {Array} List of available voices
- */
-export async function getAvailableVoices() {
-  try {
-    const client = getElevenLabsClient();
-    const voices = await client.voices.getAll();
-    return voices.voices;
-  } catch (error) {
-    console.error('Get Voices Error:', error);
-    throw new Error('Failed to get available voices');
   }
 }
