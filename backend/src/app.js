@@ -3,8 +3,12 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import interviewRoutes from "./routes/interview.routes.js";
+import userRoutes from "./routes/user.routes.js";
+import { initFirebase } from "./config/firebase.js";
+import { requireAuth } from "./middleware/auth.middleware.js";
 
 dotenv.config();
+initFirebase();
 
 const app = express();
 
@@ -14,7 +18,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.use("/api/interview", interviewRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/interview", requireAuth, interviewRoutes);
 
 // Health check
 app.get("/health", (req, res) => {

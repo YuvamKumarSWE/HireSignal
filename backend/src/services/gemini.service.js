@@ -3,7 +3,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export async function evaluateWithGemini({ transcript, role, level }) {
   const API_KEY = process.env.GEMINI_API_KEY;
   console.log("Evaluating with Gemini");
-  console.log("API_KEY:", API_KEY);
   if (!API_KEY) {
     console.warn("GEMINI_API_KEY is not set, using mock evaluation");
     return getMockEvaluation();
@@ -15,7 +14,7 @@ export async function evaluateWithGemini({ transcript, role, level }) {
     console.log("CALLING GEMINI API");
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash-preview-04-17",
+      model: "gemini-2.5-flash",
       generationConfig: { responseMimeType: "application/json" }
     });
 

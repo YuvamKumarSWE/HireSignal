@@ -1,7 +1,8 @@
 import { getRandomVoice } from './elevenlabs.service.js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getFirestore } from '../config/firebase.js';
 
-// In-memory storage for interview sessions (use database in production)
+// In-memory store keeps sessions alive during the interview
 const interviewSessions = new Map();
 
 // Mock questions fallback when Gemini API is unavailable
@@ -88,7 +89,7 @@ Make questions natural and conversational. Include the question text only, no ad
   try {
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash-preview-04-17",
+      model: "gemini-2.5-flash",
       generationConfig: { responseMimeType: "application/json" }
     });
 
@@ -131,7 +132,23 @@ export async function createInterviewSession(jobSpec, userId) {
   };
   
   interviewSessions.set(sessionId, session);
-  
+
+  // Persist to Firestore
+  const db = getFirestore();
+  if (db) {
+    await db.collection('interviews').doc(sessionId).set({
+      userId,
+      jobSpec,
+      questions,
+      answers: [],
+      evaluation: null,
+      voice: selectedVoice,
+      startedAt: new Date(),
+      completedAt: null,
+      status: 'active'
+    });
+  }
+
   return {
     sessionId,
     totalQuestions: questions.length,
@@ -277,22 +294,34 @@ export function getSessionAnswers(sessionId) {
  * @param {string} sessionId - Session ID
  * @returns {Object} Session summary
  */
-export function endInterviewSession(sessionId) {
+export async function endInterviewSession(sessionId, evaluation) {
   const session = interviewSessions.get(sessionId);
-  
+
   if (!session) {
     throw new Error('Session not found');
   }
-  
+
+  const completedAt = new Date();
   session.status = 'completed';
-  session.completedAt = new Date();
-  
+  session.completedAt = completedAt;
+
+  // Persist completed session + evaluation to Firestore
+  const db = getFirestore();
+  if (db) {
+    await db.collection('interviews').doc(sessionId).update({
+      answers: session.answers,
+      evaluation,
+      status: 'completed',
+      completedAt
+    });
+  }
+
   return {
     sessionId,
     totalQuestions: session.questions.length,
     answersSubmitted: session.answers.length,
     startedAt: session.startedAt,
-    completedAt: session.completedAt
+    completedAt
   };
 }
 

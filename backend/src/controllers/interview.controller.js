@@ -4,8 +4,8 @@ import {
   submitAnswer,
   getSession,
   getSessionAnswers,
-  endInterviewSession,
-  buildTranscriptFromSession
+  buildTranscriptFromSession,
+  endInterviewSession
 } from '../services/interview.service.js';
 import { textToSpeech, speechToText } from '../services/elevenlabs.service.js';
 import { evaluateWithGemini } from '../services/gemini.service.js';
@@ -18,11 +18,8 @@ import { getIO } from '../socket/index.js';
  */
 export async function startInterview(req, res) {
   try {
-    const { role, level, jobDescription, company, userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
+    const { role, level, jobDescription, company } = req.body;
+    const userId = req.user.uid;
 
     const jobSpec = {
       role: role || 'Software Engineer',
@@ -275,6 +272,9 @@ export async function endInterview(req, res) {
       role: session.jobSpec.role,
       level: session.jobSpec.level
     });
+
+    // Persist to Firestore + clean up in-memory session
+    await endInterviewSession(sessionId, evaluation);
 
     // Push evaluation to client via WebSocket
     const io = getIO();
