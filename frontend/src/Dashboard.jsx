@@ -1,31 +1,11 @@
-
-import React, { useState } from 'react';
-import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { auth } from './firebase';
+import { apiFetch } from './api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-const ROLES = [
-    'Software Engineer',
-    'Frontend Engineer',
-    'Backend Engineer',
-    'Full Stack Engineer',
-    'Data Scientist',
-    'Machine Learning Engineer',
-    'DevOps Engineer',
-    'Product Manager',
-    'Designer',
-];
-
-const LEVELS = [
-    'Intern',
-    'Entry-level',
-    'Mid-level',
-    'Senior',
-    'Staff',
-    'Principal',
-    'Manager',
-];
+const ROLES = ['Software Engineer', 'Frontend Engineer', 'Backend Engineer', 'Full Stack Engineer', 'Data Scientist', 'Machine Learning Engineer', 'DevOps Engineer', 'Product Manager', 'Designer'];
+const LEVELS = ['Intern', 'Entry-level', 'Mid-level', 'Senior', 'Staff', 'Principal', 'Manager'];
 
 const Dashboard = () => {
     const [jobDescription, setJobDescription] = useState('');
@@ -34,143 +14,166 @@ const Dashboard = () => {
     const [level, setLevel] = useState('Mid-level');
     const navigate = useNavigate();
 
+    const selectStyle = {
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)',
+        color: 'var(--text)',
+        fontFamily: 'var(--font-sans)',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        width: '100%',
+        fontSize: '14px',
+        outline: 'none',
+        cursor: 'pointer',
+        appearance: 'none',
+        WebkitAppearance: 'none',
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
-
         try {
-            const response = await fetch(`${API_BASE}/api/interview/start`, {
+            if (!auth.currentUser) { navigate('/auth'); return; }
+            const response = await apiFetch('/api/interview/start', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userId: 'user_' + Date.now(),
-                    role,
-                    level,
-                    jobDescription: jobDescription
-                })
+                body: JSON.stringify({ role, level, jobDescription })
             });
-
             const data = await response.json();
-
             if (data.success) {
-                console.log('Interview started:', data);
-                navigate(`/interview/${data.sessionId}`, {
-                    state: {
-                        voice: data.voice
-                    }
-                });
+                navigate(`/interview/${data.sessionId}`, { state: { voice: data.voice } });
             } else {
                 alert('Failed to start interview: ' + (data.error || 'Unknown error'));
             }
-        } catch (error) {
-            console.error('Error starting interview:', error);
-            alert('Failed to connect to server. Make sure backend is running on port 3000.');
+        } catch {
+            alert('Failed to connect to server.');
         } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-[#EAE7DE] text-[#1A1A1A] flex flex-col relative overflow-hidden">
-            <nav className="p-8 flex justify-between items-center z-10">
-                <div
-                    onClick={() => navigate('/')}
-                    className="text-xl font-bold tracking-tighter font-sans uppercase cursor-pointer hover:opacity-60 transition-opacity"
-                >
+        <div className="min-h-screen flex flex-col relative" style={{ background: 'var(--bg)' }}>
+
+            {/* Ambient */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute rounded-full blur-[150px] opacity-10"
+                    style={{ width: 700, height: 700, top: -200, right: -100, background: 'radial-gradient(circle, #7C6FF7, transparent)' }} />
+            </div>
+
+            {/* Nav */}
+            <nav className="px-8 py-6 flex justify-between items-center relative z-10"
+                style={{ borderBottom: '1px solid var(--border)' }}>
+                <div onClick={() => navigate('/')} className="cursor-pointer text-sm font-bold tracking-[0.2em] uppercase"
+                    style={{ fontFamily: 'var(--font-sans)' }}>
                     HireSignal
                 </div>
+                <button onClick={() => navigate('/profile')}
+                    className="text-sm font-medium transition-colors"
+                    style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}
+                    onMouseEnter={e => e.target.style.color = 'var(--text)'}
+                    onMouseLeave={e => e.target.style.color = 'var(--muted)'}>
+                    History
+                </button>
             </nav>
 
-            <main className="flex-1 flex flex-col items-center justify-center p-4 max-w-4xl mx-auto w-full z-10">
+            <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10">
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8 }}
-                    className="w-full text-center mb-12"
+                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                    className="w-full max-w-2xl"
                 >
-                    <h1 className="text-6xl md:text-7xl font-serif mb-4">The Context.</h1>
-                    <p className="font-sans text-lg opacity-60 uppercase tracking-widest">Paste the job description below to calibrate the AI</p>
-                </motion.div>
-
-                <motion.form
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.2, duration: 0.8 }}
-                    onSubmit={handleSubmit}
-                    className="w-full relative"
-                >
-                    <div className="flex gap-6 mb-6">
-                        <div className="flex-1">
-                            <label className="block text-sm font-sans uppercase tracking-widest opacity-60 mb-2">Role</label>
-                            <select
-                                value={role}
-                                onChange={(e) => setRole(e.target.value)}
-                                className="w-full bg-[#F4F1E8] px-4 py-3 text-base font-sans rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] transition-all shadow-sm"
-                            >
-                                {ROLES.map((r) => (
-                                    <option key={r} value={r}>{r}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="flex-1">
-                            <label className="block text-sm font-sans uppercase tracking-widest opacity-60 mb-2">Level</label>
-                            <select
-                                value={level}
-                                onChange={(e) => setLevel(e.target.value)}
-                                className="w-full bg-[#F4F1E8] px-4 py-3 text-base font-sans rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] transition-all shadow-sm"
-                            >
-                                {LEVELS.map((l) => (
-                                    <option key={l} value={l}>{l}</option>
-                                ))}
-                            </select>
-                        </div>
+                    {/* Header */}
+                    <div className="mb-10">
+                        <h1 className="text-5xl md:text-6xl mb-3" style={{ fontFamily: 'var(--font-serif)' }}>
+                            Set the stage.
+                        </h1>
+                        <p className="text-sm" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                            Paste the job description and we'll tailor the interview to the role.
+                        </p>
                     </div>
 
-                    <div className="relative group">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-gray-200 to-gray-300 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-                        <textarea
-                            value={jobDescription}
-                            onChange={(e) => setJobDescription(e.target.value)}
-                            placeholder="Senior Frontend Developer at Google...
-Responsibilities:
-- Build modern web applications...
-Requirements:
-- 5+ years of React experience..."
-                            className="relative w-full h-[360px] bg-[#F4F1E8] p-8 text-lg font-mono rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] resize-none transition-all shadow-sm placeholder:opacity-30 placeholder:font-sans"
-                            required
-                        />
-                    </div>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* Role + Level row */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium mb-2 tracking-widest uppercase"
+                                    style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Role</label>
+                                <div className="relative">
+                                    <select value={role} onChange={e => setRole(e.target.value)} style={selectStyle}
+                                        onFocus={e => e.target.style.borderColor = 'rgba(124,111,247,0.5)'}
+                                        onBlur={e => e.target.style.borderColor = 'var(--border)'}>
+                                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-xs" style={{ color: 'var(--muted)' }}>↓</div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-2 tracking-widest uppercase"
+                                    style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Level</label>
+                                <div className="relative">
+                                    <select value={level} onChange={e => setLevel(e.target.value)} style={selectStyle}
+                                        onFocus={e => e.target.style.borderColor = 'rgba(124,111,247,0.5)'}
+                                        onBlur={e => e.target.style.borderColor = 'var(--border)'}>
+                                        {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                                    </select>
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-xs" style={{ color: 'var(--muted)' }}>↓</div>
+                                </div>
+                            </div>
+                        </div>
 
-                    <motion.div
-                        className="mt-8 flex justify-center"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.4 }}
-                    >
+                        {/* Textarea */}
+                        <div>
+                            <label className="block text-xs font-medium mb-2 tracking-widest uppercase"
+                                style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Job Description</label>
+                            <textarea
+                                value={jobDescription}
+                                onChange={e => setJobDescription(e.target.value)}
+                                required
+                                rows={12}
+                                placeholder={"Senior Frontend Engineer at Stripe\n\nResponsibilities:\n— Build high-performance web applications\n— Own the design system\n\nRequirements:\n— 4+ years React experience\n— Strong TypeScript skills"}
+                                style={{
+                                    background: 'var(--surface)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: '16px',
+                                    color: 'var(--text)',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '13px',
+                                    lineHeight: '1.7',
+                                    padding: '20px',
+                                    width: '100%',
+                                    resize: 'none',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s',
+                                }}
+                                onFocus={e => e.target.style.borderColor = 'rgba(124,111,247,0.5)'}
+                                onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                            />
+                        </div>
+
+                        {/* Submit */}
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="px-16 py-5 bg-[#1A1A1A] text-[#EAE7DE] text-xl font-sans font-bold rounded-full hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
+                            className="w-full py-4 rounded-2xl font-semibold text-base transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                            style={{
+                                background: isLoading ? 'var(--surface-2)' : 'linear-gradient(135deg, #7C6FF7, #4F9EF8)',
+                                color: '#fff',
+                                fontFamily: 'var(--font-sans)',
+                                boxShadow: isLoading ? 'none' : '0 0 40px rgba(124,111,247,0.25)',
+                            }}
                         >
                             {isLoading ? (
                                 <>
-                                    <span className="w-5 h-5 border-2 border-[#EAE7DE] border-t-transparent rounded-full animate-spin"></span>
-                                    Initializing...
+                                    <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
+                                        style={{ borderColor: 'rgba(255,255,255,0.4)', borderTopColor: 'transparent' }} />
+                                    Generating interview...
                                 </>
-                            ) : (
-                                "Begin Simulation"
-                            )}
+                            ) : 'Begin Simulation →'}
                         </button>
-                    </motion.div>
-                </motion.form>
+                    </form>
+                </motion.div>
             </main>
-
-            {/* Decorative background element */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vh] h-[120vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vh] h-[80vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
-
         </div>
     );
 };

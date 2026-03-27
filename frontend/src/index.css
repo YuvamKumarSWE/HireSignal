@@ -1,32 +1,45 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @import "tailwindcss";
 
 :root {
+  --font-sans: "Inter", sans-serif;
   --font-serif: "Playfair Display", serif;
-  --font-sans: "Manrope", sans-serif;
-  --bg-primary: #EAE7DE;
-  /* Creamy editorial background */
-  --text-primary: #1A1A1A;
-  /* Soft black */
+  --font-mono: "JetBrains Mono", monospace;
+
+  --bg: #07071A;
+  --surface: #0D0D21;
+  --surface-2: #13132B;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: #EEEEf8;
+  --muted: #55556A;
+  --accent: #7C6FF7;
+  --accent-2: #4F9EF8;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-serif);
   font-weight: 400;
-  /* Editorial look often uses lighter weights for display */
 }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 3px; }
+
+/* Selection */
+::selection { background: rgba(124, 111, 247, 0.3); color: var(--text); }

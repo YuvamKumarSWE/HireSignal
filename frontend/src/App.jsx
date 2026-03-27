@@ -5,6 +5,7 @@ import Dashboard from './Dashboard';
 import Auth from './Auth';
 import Interview from './Interview';
 import Results from './Results';
+import ProfilePage from './ProfilePage';
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/interview/:sessionId" element={<Interview />} />
         <Route path="/results/:sessionId" element={<Results />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Routes>
     </Router>
   );

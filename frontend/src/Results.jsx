@@ -1,139 +1,167 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useLocation, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
 export default function Results() {
-  const { state } = useLocation();
-  const navigate = useNavigate();
+    const { state } = useLocation();
+    const navigate = useNavigate();
 
-  if (!state?.evaluation) {
+    if (!state?.evaluation) {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
+                <div className="text-center">
+                    <h1 className="text-4xl mb-4" style={{ fontFamily: 'var(--font-serif)' }}>No results found.</h1>
+                    <p className="text-sm mb-8" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Complete an interview to see your evaluation.</p>
+                    <button onClick={() => navigate('/dashboard')}
+                        className="px-8 py-3 rounded-full text-sm font-medium"
+                        style={{ background: 'linear-gradient(135deg, #7C6FF7, #4F9EF8)', color: '#fff', fontFamily: 'var(--font-sans)' }}>
+                        Back to Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    const { hire_probability, strengths, weaknesses, final_verdict } = state.evaluation;
+    const pct = Math.round(hire_probability * 100);
+    const scoreColor = pct >= 70 ? '#34D399' : pct >= 45 ? '#F59E0B' : '#F87171';
+    const scoreLabel = pct >= 70 ? 'Strong Hire' : pct >= 45 ? 'Borderline' : 'Not Yet';
+
     return (
-      <div className="min-h-screen bg-[#EAE7DE] text-[#1A1A1A] flex flex-col relative overflow-hidden">
-        <nav className="p-8 flex justify-between items-center z-10">
-          <div
-            onClick={() => navigate("/")}
-            className="text-xl font-bold tracking-tighter font-sans uppercase cursor-pointer hover:opacity-60 transition-opacity"
-          >
-            HireSignal
-          </div>
-        </nav>
-        <main className="flex-1 flex flex-col items-center justify-center z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center"
-          >
-            <h1 className="text-5xl font-serif mb-4">No Results Found</h1>
-            <p className="font-sans text-lg opacity-60 mb-8">Complete an interview to see your evaluation.</p>
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="px-10 py-4 bg-[#1A1A1A] text-[#EAE7DE] text-lg font-sans font-bold rounded-full hover:scale-105 active:scale-95 transition-all"
-            >
-              Back to Dashboard
-            </button>
-          </motion.div>
-        </main>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vh] h-[120vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vh] h-[80vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
-      </div>
-    );
-  }
+        <div className="min-h-screen flex flex-col relative" style={{ background: 'var(--bg)' }}>
 
-  const { hire_probability, strengths, weaknesses, final_verdict } = state.evaluation;
-  const pct = Math.round(hire_probability * 100);
-  const scoreColor = pct >= 70 ? "text-green-700" : pct >= 45 ? "text-yellow-600" : "text-red-600";
+            {/* Ambient glow based on score */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute rounded-full blur-[150px] opacity-[0.07]"
+                    style={{ width: 600, height: 600, top: -100, left: '50%', transform: 'translateX(-50%)', background: `radial-gradient(circle, ${scoreColor}, transparent)` }} />
+            </div>
 
-  return (
-    <div className="min-h-screen bg-[#EAE7DE] text-[#1A1A1A] flex flex-col relative overflow-hidden">
-      <nav className="p-8 flex justify-between items-center z-10">
-        <div
-          onClick={() => navigate("/")}
-          className="text-xl font-bold tracking-tighter font-sans uppercase cursor-pointer hover:opacity-60 transition-opacity"
-        >
-          HireSignal
+            {/* Nav */}
+            <nav className="px-8 py-6 flex justify-between items-center relative z-10" style={{ borderBottom: '1px solid var(--border)' }}>
+                <div onClick={() => navigate('/')} className="cursor-pointer text-sm font-bold tracking-[0.2em] uppercase"
+                    style={{ fontFamily: 'var(--font-sans)' }}>
+                    HireSignal
+                </div>
+            </nav>
+
+            <main className="flex-1 flex flex-col items-center p-6 pt-12 max-w-2xl mx-auto w-full relative z-10">
+
+                {/* Header */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6 }}
+                    className="text-center mb-12"
+                >
+                    <h1 className="text-5xl md:text-6xl mb-3" style={{ fontFamily: 'var(--font-serif)' }}>The Verdict.</h1>
+                    <p className="text-sm" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Your interview evaluation</p>
+                </motion.div>
+
+                <div className="w-full space-y-4">
+
+                    {/* Score */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1, duration: 0.6 }}
+                        className="p-8 rounded-2xl text-center"
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                    >
+                        <p className="text-xs font-medium tracking-[0.2em] uppercase mb-4" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                            Hire Probability
+                        </p>
+                        <div className="text-[6rem] font-bold leading-none mb-3" style={{ fontFamily: 'var(--font-serif)', color: scoreColor }}>
+                            {pct}%
+                        </div>
+                        <span className="text-xs px-4 py-1.5 rounded-full font-medium"
+                            style={{ background: `${scoreColor}18`, border: `1px solid ${scoreColor}40`, color: scoreColor, fontFamily: 'var(--font-sans)' }}>
+                            {scoreLabel}
+                        </span>
+
+                        {/* Score bar */}
+                        <div className="mt-6 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-2)' }}>
+                            <motion.div
+                                className="h-full rounded-full"
+                                style={{ background: scoreColor }}
+                                initial={{ width: 0 }}
+                                animate={{ width: `${pct}%` }}
+                                transition={{ delay: 0.5, duration: 1, ease: 'easeOut' }}
+                            />
+                        </div>
+                    </motion.div>
+
+                    {/* Strengths + Weaknesses side by side */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2, duration: 0.6 }}
+                        className="grid grid-cols-2 gap-4"
+                    >
+                        <div className="p-6 rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                            <p className="text-xs font-medium tracking-[0.2em] uppercase mb-4" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                                Strengths
+                            </p>
+                            <ul className="space-y-3">
+                                {strengths.map((s, i) => (
+                                    <li key={i} className="flex gap-2.5 text-sm" style={{ fontFamily: 'var(--font-sans)', lineHeight: 1.5 }}>
+                                        <span className="mt-0.5 font-bold flex-shrink-0" style={{ color: '#34D399' }}>+</span>
+                                        {s}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="p-6 rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                            <p className="text-xs font-medium tracking-[0.2em] uppercase mb-4" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                                To Improve
+                            </p>
+                            <ul className="space-y-3">
+                                {weaknesses.map((w, i) => (
+                                    <li key={i} className="flex gap-2.5 text-sm" style={{ fontFamily: 'var(--font-sans)', lineHeight: 1.5 }}>
+                                        <span className="mt-0.5 font-bold flex-shrink-0" style={{ color: '#F87171' }}>−</span>
+                                        {w}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </motion.div>
+
+                    {/* Final verdict */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3, duration: 0.6 }}
+                        className="p-6 rounded-2xl"
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                    >
+                        <p className="text-xs font-medium tracking-[0.2em] uppercase mb-3" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                            Final Verdict
+                        </p>
+                        <p className="text-sm leading-relaxed" style={{ fontFamily: 'var(--font-sans)', color: 'var(--text)', lineHeight: 1.8 }}>
+                            {final_verdict}
+                        </p>
+                    </motion.div>
+
+                    {/* Actions */}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.5 }}
+                        className="flex gap-3 pt-2"
+                    >
+                        <button onClick={() => navigate('/profile')}
+                            className="flex-1 py-4 rounded-2xl text-sm font-medium transition-all"
+                            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', fontFamily: 'var(--font-sans)' }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(124,111,247,0.4)'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+                            View History
+                        </button>
+                        <button onClick={() => navigate('/dashboard')}
+                            className="flex-1 py-4 rounded-2xl text-sm font-semibold"
+                            style={{ background: 'linear-gradient(135deg, #7C6FF7, #4F9EF8)', color: '#fff', fontFamily: 'var(--font-sans)', boxShadow: '0 0 30px rgba(124,111,247,0.2)' }}>
+                            New Interview
+                        </button>
+                    </motion.div>
+                </div>
+            </main>
         </div>
-      </nav>
-
-      <main className="flex-1 flex flex-col items-center justify-center p-4 max-w-3xl mx-auto w-full z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="w-full text-center mb-10"
-        >
-          <h1 className="text-6xl md:text-7xl font-serif mb-4">The Verdict.</h1>
-          <p className="font-sans text-lg opacity-60 uppercase tracking-widest">Your interview evaluation</p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2, duration: 0.8 }}
-          className="w-full space-y-6"
-        >
-          {/* Score card */}
-          <div className="bg-[#F4F1E8] rounded-2xl border border-[#D1D1D1] p-8 text-center shadow-sm">
-            <p className="font-sans text-sm uppercase tracking-widest opacity-60 mb-2">Hire Probability</p>
-            <p className={`text-7xl font-serif font-bold ${scoreColor}`}>{pct}%</p>
-          </div>
-
-          {/* Strengths */}
-          <div className="bg-[#F4F1E8] rounded-2xl border border-[#D1D1D1] p-8 shadow-sm">
-            <h2 className="font-sans text-sm uppercase tracking-widest opacity-60 mb-4">Strengths</h2>
-            <ul className="space-y-2">
-              {strengths.map((s, i) => (
-                <li key={i} className="flex items-start gap-3 text-base font-sans">
-                  <span className="mt-0.5 text-green-700 font-bold text-lg leading-none">+</span>
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Weaknesses */}
-          <div className="bg-[#F4F1E8] rounded-2xl border border-[#D1D1D1] p-8 shadow-sm">
-            <h2 className="font-sans text-sm uppercase tracking-widest opacity-60 mb-4">Areas to Improve</h2>
-            <ul className="space-y-2">
-              {weaknesses.map((w, i) => (
-                <li key={i} className="flex items-start gap-3 text-base font-sans">
-                  <span className="mt-0.5 text-red-600 font-bold text-lg leading-none">−</span>
-                  <span>{w}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Final verdict */}
-          <div className="bg-[#F4F1E8] rounded-2xl border border-[#D1D1D1] p-8 shadow-sm">
-            <h2 className="font-sans text-sm uppercase tracking-widest opacity-60 mb-4">Final Verdict</h2>
-            <p className="text-base font-sans">{final_verdict}</p>
-          </div>
-
-          {/* Actions */}
-          <motion.div
-            className="flex justify-center gap-4 pt-2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-          >
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="px-10 py-4 border-2 border-[#1A1A1A] text-[#1A1A1A] text-lg font-sans font-bold rounded-full hover:bg-[#1A1A1A] hover:text-[#EAE7DE] transition-all"
-            >
-              Back to Dashboard
-            </button>
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="px-10 py-4 bg-[#1A1A1A] text-[#EAE7DE] text-lg font-sans font-bold rounded-full hover:scale-105 active:scale-95 transition-all"
-            >
-              New Interview
-            </button>
-          </motion.div>
-        </motion.div>
-      </main>
-
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vh] h-[120vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vh] h-[80vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
-    </div>
-  );
+    );
 }

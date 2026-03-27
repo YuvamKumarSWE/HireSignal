@@ -1,16 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { apiFetch, apiFetchMultipart, BASE } from './api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const SOCKET_URL = BASE;
 
-const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-};
+const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
 const Interview = () => {
     const { sessionId } = useParams();
@@ -21,122 +17,69 @@ const Interview = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
     const [error, setError] = useState(null);
-    const [isVoiceMode, setIsVoiceMode] = useState(false);
+    const [isVoiceMode, setIsVoiceMode] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
     const [isPlayingAudio, setIsPlayingAudio] = useState(false);
     const [mediaRecorder, setMediaRecorder] = useState(null);
     const [isConnecting, setIsConnecting] = useState(true);
     const [retryCount, setRetryCount] = useState(0);
-    const [voiceInfo, setVoiceInfo] = useState(location.state?.voice || null);
-    const [transcriptionStatus, setTranscriptionStatus] = useState(null); // null | 'processing' | 'done'
+    const [voiceInfo] = useState(location.state?.voice || null);
+    const [transcriptionStatus, setTranscriptionStatus] = useState(null);
     const [elapsedTime, setElapsedTime] = useState(0);
     const MAX_RETRIES = 5;
-    const RETRY_DELAY = 2000; // 2 seconds
-    const isFinishingRef = useRef(false); // Prevent duplicate finish calls
+    const RETRY_DELAY = 2000;
+    const isFinishingRef = useRef(false);
     const socketRef = useRef(null);
 
-    // Socket.io connection
     useEffect(() => {
         const socket = io(SOCKET_URL);
         socketRef.current = socket;
-
         socket.emit('join:session', { sessionId });
-
-        socket.on('transcription:status', ({ status, text }) => {
+        socket.on('transcription:status', ({ status }) => {
             setTranscriptionStatus(status);
-            if (status === 'done') {
-                setTimeout(() => setTranscriptionStatus(null), 2000);
-            }
+            if (status === 'done') setTimeout(() => setTranscriptionStatus(null), 2000);
         });
-
-        socket.on('interview:timer', ({ elapsed }) => {
-            setElapsedTime(elapsed);
-        });
-
+        socket.on('interview:timer', ({ elapsed }) => setElapsedTime(elapsed));
         socket.on('evaluation:complete', ({ evaluation, transcript }) => {
-            // Evaluation pushed via WebSocket — navigate if not already navigating
             if (!isFinishingRef.current) return;
-            navigate(`/results/${sessionId}`, {
-                state: { evaluation, transcript }
-            });
+            navigate(`/results/${sessionId}`, { state: { evaluation, transcript } });
         });
-
-        return () => {
-            socket.emit('leave:session', { sessionId });
-            socket.disconnect();
-        };
-    }, [sessionId]);
+        return () => { socket.emit('leave:session', { sessionId }); socket.disconnect(); };
+    }, [sessionId, navigate]);
 
     const finishInterview = async () => {
-        // Prevent duplicate calls
-        if (isFinishingRef.current) {
-            console.log('⚠️ finishInterview already in progress, skipping duplicate call');
-            return;
-        }
-
+        if (isFinishingRef.current) return;
         try {
             isFinishingRef.current = true;
-            console.log('🏁 Finishing interview...');
             setIsLoading(true);
-            setIsCompleted(true); // Immediately mark as completed to prevent showing question again
-            setCurrentQuestion(null); // Clear the current question
-
-            const res = await fetch(
-                `${API_BASE}/api/interview/${sessionId}/end`,
-                { method: "POST" }
-            );
-
+            setIsCompleted(true);
+            setCurrentQuestion(null);
+            const res = await apiFetch(`/api/interview/${sessionId}/end`, { method: 'POST' });
             const data = await res.json();
-
-            navigate(`/results/${sessionId}`, {
-                state: {
-                    evaluation: data.evaluation,
-                    transcript: data.transcript
-                }
-            });
-        } catch (err) {
-            console.error(err);
-            setError("Failed to evaluate interview");
-            setIsCompleted(false); // Reset if there's an error
-            isFinishingRef.current = false; // Reset the guard on error
+            navigate(`/results/${sessionId}`, { state: { evaluation: data.evaluation, transcript: data.transcript } });
+        } catch {
+            setError('Failed to evaluate interview');
+            setIsCompleted(false);
+            isFinishingRef.current = false;
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Fetch the current question when component mounts or after submitting an answer
     const fetchQuestion = async (isRetry = false) => {
         try {
             setIsLoading(true);
-            console.log('📝 Fetching question...');
-            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/question`);
+            const response = await apiFetch(`/api/interview/${sessionId}/question`);
             const data = await response.json();
-
-            if (data.completed) {
-                console.log('✅ Interview completed, finishing...');
-                finishInterview();
-            } else if (data.success) {
-                console.log(`📋 Question ${data.questionNumber}/${data.totalQuestions}: ${data.question}`);
-                setCurrentQuestion(data);
-                setIsConnecting(false);
-                setRetryCount(0); // Reset retry count on success
-            } else {
-                setError(data.error || 'Failed to load question');
-                setIsConnecting(false);
-            }
-        } catch (err) {
-            console.error('Error fetching question:', err);
-
-            // Only retry on initial connection, not on subsequent errors
+            if (data.completed) { finishInterview(); }
+            else if (data.success) { setCurrentQuestion(data); setIsConnecting(false); setRetryCount(0); }
+            else { setError(data.error || 'Failed to load question'); setIsConnecting(false); }
+        } catch {
             if (isConnecting && retryCount < MAX_RETRIES) {
-                console.log(`Connection attempt ${retryCount + 1}/${MAX_RETRIES} failed. Retrying in ${RETRY_DELAY / 1000}s...`);
-                setRetryCount(prev => prev + 1);
-                setTimeout(() => {
-                    fetchQuestion(true);
-                }, RETRY_DELAY);
+                setRetryCount(p => p + 1);
+                setTimeout(() => fetchQuestion(true), RETRY_DELAY);
             } else {
-                // Only set error after all retries exhausted
-                setError('Failed to connect to server. Please ensure the backend is running on port 3000.');
+                setError('Failed to connect to server.');
                 setIsConnecting(false);
             }
         } finally {
@@ -144,155 +87,87 @@ const Interview = () => {
         }
     };
 
-    useEffect(() => {
-        if (sessionId) {
-            fetchQuestion();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionId]);
+    useEffect(() => { if (sessionId) fetchQuestion(); }, [sessionId]); // eslint-disable-line
 
-    // Play question as audio in voice mode
     const playQuestionAudio = async () => {
         try {
             setIsPlayingAudio(true);
-            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/question/audio`);
+            const response = await apiFetch(`/api/interview/${sessionId}/question/audio`);
             const audioBlob = await response.blob();
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
-
-            audio.onended = () => {
-                setIsPlayingAudio(false);
-                URL.revokeObjectURL(audioUrl);
-            };
-
+            audio.onended = () => { setIsPlayingAudio(false); URL.revokeObjectURL(audioUrl); };
             await audio.play();
-        } catch (err) {
-            console.error('Error playing audio:', err);
+        } catch {
             setIsPlayingAudio(false);
-            alert('Failed to play audio. This may be due to:\n\n1. Backend not running on port 3000\n2. ElevenLabs API key invalid or needs credits\n3. Network connection issue\n\nPlease check the backend console for detailed errors.');
         }
     };
 
-    // Start recording voice answer
+    useEffect(() => { if (currentQuestion) playQuestionAudio(); }, [currentQuestion?.questionId]); // eslint-disable-line
+
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
-            const localChunks = [];
-
-            recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    localChunks.push(e.data);
-                }
-            };
-
+            const chunks = [];
+            recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
             recorder.onstop = async () => {
-                const audioBlob = new Blob(localChunks, { type: 'audio/webm' });
-                await submitVoiceAnswer(audioBlob);
-                stream.getTracks().forEach(track => track.stop());
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                await submitVoiceAnswer(blob);
+                stream.getTracks().forEach(t => t.stop());
             };
-
             setMediaRecorder(recorder);
             recorder.start();
             setIsRecording(true);
-        } catch (err) {
-            console.error('Error starting recording:', err);
-            alert('Failed to access microphone. Please allow microphone permissions.');
+        } catch {
+            alert('Microphone access required.');
         }
     };
 
-    // Stop recording
     const stopRecording = () => {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-            setIsRecording(false);
-        }
+        if (mediaRecorder?.state === 'recording') { mediaRecorder.stop(); setIsRecording(false); }
     };
 
-    // Submit voice answer
     const submitVoiceAnswer = async (audioBlob) => {
         try {
             setIsLoading(true);
             const formData = new FormData();
             formData.append('audio', audioBlob, 'answer.webm');
             formData.append('questionId', currentQuestion.questionId);
-
-            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/answer/audio`, {
-                method: 'POST',
-                body: formData
-            });
-
+            const response = await apiFetchMultipart(`/api/interview/${sessionId}/answer/audio`, { method: 'POST', body: formData });
             const data = await response.json();
-
-            if (data.success) {
-                console.log('Transcribed:', data.transcribedText);
-                if (data.hasMoreQuestions) {
-                    fetchQuestion();
-                } else {
-                    finishInterview();
-                }
-            } else {
-                setError(data.error || 'Failed to submit voice answer');
-            }
-        } catch (err) {
-            setError('Failed to submit voice answer');
-            console.error('Error submitting voice:', err);
-        } finally {
-            setIsLoading(false);
-        }
+            if (data.success) { data.hasMoreQuestions ? fetchQuestion() : finishInterview(); }
+            else setError(data.error || 'Failed to submit answer');
+        } catch { setError('Failed to submit voice answer'); }
+        finally { setIsLoading(false); }
     };
 
     const handleSubmitAnswer = async (e) => {
         e.preventDefault();
         if (!answer.trim()) return;
-
         try {
             setIsLoading(true);
-            const response = await fetch(`${API_BASE}/api/interview/${sessionId}/answer`, {
+            const response = await apiFetch(`/api/interview/${sessionId}/answer`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    questionId: currentQuestion.questionId,
-                    answer: answer
-                })
+                body: JSON.stringify({ questionId: currentQuestion.questionId, answer })
             });
-
             const data = await response.json();
-
-            if (data.success) {
-                console.log(`✅ Answer submitted. hasMoreQuestions: ${data.hasMoreQuestions}`);
-                setAnswer(''); // Clear the answer
-                if (data.hasMoreQuestions) {
-                    console.log('➡️ Fetching next question...');
-                    fetchQuestion(); // Fetch next question
-                } else {
-                    console.log('🏁 No more questions, finishing interview...');
-                    finishInterview();
-                }
-            } else {
-                setError(data.error || 'Failed to submit answer');
-            }
-        } catch (err) {
-            setError('Failed to submit answer');
-            console.error('Error submitting answer:', err);
-        } finally {
-            setIsLoading(false);
-        }
+            if (data.success) { setAnswer(''); data.hasMoreQuestions ? fetchQuestion() : finishInterview(); }
+            else setError(data.error || 'Failed to submit answer');
+        } catch { setError('Failed to submit answer'); }
+        finally { setIsLoading(false); }
     };
+
+    // ── Loading / Error / Completed states ──
 
     if (isConnecting && !currentQuestion) {
         return (
-            <div className="min-h-screen bg-[#EAE7DE] text-[#1A1A1A] flex items-center justify-center">
+            <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
                 <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-[#1A1A1A] border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-                    <h1 className="text-3xl font-serif mb-4">Connecting to server...</h1>
-                    <p className="text-lg opacity-60 mb-2">
-                        {retryCount > 0 ? `Retry attempt ${retryCount}/${MAX_RETRIES}` : 'Establishing connection'}
-                    </p>
-                    <p className="text-sm opacity-40">
-                        Please ensure the backend is running on port 3000
+                    <div className="w-12 h-12 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-6"
+                        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                    <p className="text-sm" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                        {retryCount > 0 ? `Connecting... (${retryCount}/${MAX_RETRIES})` : 'Connecting to server'}
                     </p>
                 </div>
             </div>
@@ -301,14 +176,13 @@ const Interview = () => {
 
     if (error) {
         return (
-            <div className="min-h-screen bg-[#EAE7DE] text-[#1A1A1A] flex items-center justify-center">
-                <div className="text-center">
-                    <h1 className="text-4xl font-serif mb-4">Error</h1>
-                    <p className="text-lg mb-8">{error}</p>
-                    <button
-                        onClick={() => navigate('/dashboard')}
-                        className="px-8 py-3 bg-[#1A1A1A] text-[#EAE7DE] rounded-full"
-                    >
+            <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
+                <div className="text-center max-w-sm">
+                    <div className="text-4xl mb-4" style={{ fontFamily: 'var(--font-serif)' }}>Something went wrong.</div>
+                    <p className="text-sm mb-8" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>{error}</p>
+                    <button onClick={() => navigate('/dashboard')}
+                        className="px-8 py-3 rounded-full text-sm font-medium"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
                         Back to Dashboard
                     </button>
                 </div>
@@ -318,197 +192,215 @@ const Interview = () => {
 
     if (isCompleted) {
         return (
-            <div className="min-h-screen bg-[#EAE7DE] text-[#1A1A1A] flex items-center justify-center">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="text-center max-w-2xl p-8"
-                >
-                    <h1 className="text-6xl font-serif mb-6">Interview Complete!</h1>
-                    <p className="text-xl mb-8 opacity-60">
-                        Thank you for completing the interview. Your responses have been recorded.
-                    </p>
+            <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
+                    <div className="w-16 h-16 rounded-full mx-auto mb-8 flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg, #7C6FF7, #4F9EF8)', boxShadow: '0 0 50px rgba(124,111,247,0.3)' }}>
+                        <span className="text-2xl">✓</span>
+                    </div>
+                    <h1 className="text-4xl mb-3" style={{ fontFamily: 'var(--font-serif)' }}>Interview complete.</h1>
+                    <p className="text-sm" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Evaluating your responses...</p>
+                    <div className="mt-6 w-6 h-6 rounded-full border-2 border-t-transparent animate-spin mx-auto"
+                        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
                 </motion.div>
             </div>
         );
     }
 
+    // ── Main interview UI ──
+    const progress = currentQuestion
+        ? (currentQuestion.questionNumber - 1) / currentQuestion.totalQuestions
+        : 0;
+
     return (
-        <div className="min-h-screen bg-[#EAE7DE] text-[#1A1A1A] flex flex-col relative overflow-hidden">
-            <nav className="p-8 flex justify-between items-center z-10">
-                <div
-                    onClick={() => navigate('/dashboard')}
-                    className="text-xl font-bold tracking-tighter font-sans uppercase cursor-pointer hover:opacity-60 transition-opacity"
-                >
+        <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
+
+            {/* Progress bar */}
+            <div className="fixed top-0 left-0 right-0 h-[2px] z-50" style={{ background: 'var(--border)' }}>
+                <motion.div
+                    className="h-full"
+                    style={{ background: 'linear-gradient(to right, #7C6FF7, #4F9EF8)' }}
+                    animate={{ width: `${progress * 100}%` }}
+                    transition={{ duration: 0.5 }}
+                />
+            </div>
+
+            {/* Nav */}
+            <nav className="px-8 py-5 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border)' }}>
+                <div onClick={() => navigate('/dashboard')} className="cursor-pointer text-sm font-bold tracking-[0.2em] uppercase"
+                    style={{ fontFamily: 'var(--font-sans)' }}>
                     HireSignal
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-6">
                     {voiceInfo && (
-                        <div className="text-sm opacity-60 flex items-center gap-2">
-                            <span>🎙️</span>
-                            <span className="font-medium">{voiceInfo.name}</span>
-                            <span className="opacity-50">({voiceInfo.gender})</span>
-                        </div>
+                        <span className="text-xs px-3 py-1 rounded-full"
+                            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                            {voiceInfo.name}
+                        </span>
                     )}
                     {elapsedTime > 0 && (
-                        <div className="text-sm font-mono opacity-50 tabular-nums">
+                        <span className="text-sm tabular-nums" style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
                             {formatTime(elapsedTime)}
-                        </div>
+                        </span>
                     )}
                     {currentQuestion && (
-                        <div className="text-sm opacity-60">
-                            Question {currentQuestion.questionNumber} of {currentQuestion.totalQuestions}
-                        </div>
+                        <span className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                            {currentQuestion.questionNumber} / {currentQuestion.totalQuestions}
+                        </span>
                     )}
                     <button
-                        onClick={() => setIsVoiceMode(!isVoiceMode)}
-                        className={`px-4 py-2 text-sm font-bold rounded-full transition-all ${isVoiceMode
-                            ? 'bg-[#1A1A1A] text-[#EAE7DE]'
-                            : 'border-2 border-[#1A1A1A] text-[#1A1A1A]'
-                            }`}
-                    >
-                        {isVoiceMode ? '🎤 Voice Mode' : '⌨️ Text Mode'}
+                        onClick={() => setIsVoiceMode(v => !v)}
+                        className="text-xs px-4 py-2 rounded-full font-medium transition-all"
+                        style={{
+                            background: isVoiceMode ? 'rgba(124,111,247,0.15)' : 'var(--surface)',
+                            border: `1px solid ${isVoiceMode ? 'rgba(124,111,247,0.4)' : 'var(--border)'}`,
+                            color: isVoiceMode ? 'var(--accent)' : 'var(--muted)',
+                            fontFamily: 'var(--font-sans)'
+                        }}>
+                        {isVoiceMode ? 'Voice' : 'Text'}
                     </button>
                 </div>
             </nav>
 
-            <main className="flex-1 flex flex-col items-center justify-center p-4 max-w-4xl mx-auto w-full z-10">
-                {isLoading && !currentQuestion ? (
-                    <div className="text-center">
-                        <div className="w-12 h-12 border-4 border-[#1A1A1A] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-lg opacity-60">Loading question...</p>
-                    </div>
-                ) : currentQuestion ? (
-                    <>
+            {/* Main */}
+            <main className="flex-1 flex flex-col items-center justify-center p-8 max-w-3xl mx-auto w-full">
+                <AnimatePresence mode="wait">
+                    {isLoading && !currentQuestion ? (
+                        <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center">
+                            <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4"
+                                style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                            <p className="text-sm" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Loading question...</p>
+                        </motion.div>
+                    ) : currentQuestion ? (
                         <motion.div
                             key={currentQuestion.questionId}
-                            initial={{ opacity: 0, y: 30 }}
+                            initial={{ opacity: 0, y: 24 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6 }}
-                            className="w-full text-center mb-12"
+                            exit={{ opacity: 0, y: -24 }}
+                            transition={{ duration: 0.5 }}
+                            className="w-full"
                         >
-                            <h1 className="text-3xl md:text-4xl font-serif mb-6 leading-tight">
-                                {currentQuestion.question}
-                            </h1>
-                            <p className="text-sm uppercase tracking-widest opacity-40 mb-4">
-                                {currentQuestion.category} • ~{currentQuestion.expectedDuration}s expected
-                            </p>
-                            {isVoiceMode && (
-                                <button
-                                    onClick={playQuestionAudio}
-                                    disabled={isPlayingAudio}
-                                    className="px-6 py-3 bg-[#1A1A1A] text-[#EAE7DE] rounded-full hover:scale-105 transition-all disabled:opacity-50"
-                                >
-                                    {isPlayingAudio ? '🔊 Playing...' : '🔊 Play Question'}
-                                </button>
-                            )}
-                        </motion.div>
+                            {/* Category pill */}
+                            <div className="mb-8 flex items-center gap-3">
+                                <span className="text-xs px-3 py-1 rounded-full font-medium"
+                                    style={{ background: 'rgba(124,111,247,0.12)', border: '1px solid rgba(124,111,247,0.25)', color: 'var(--accent)', fontFamily: 'var(--font-sans)' }}>
+                                    {currentQuestion.category}
+                                </span>
+                                {isPlayingAudio && (
+                                    <motion.span
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        className="text-xs flex items-center gap-2"
+                                        style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                                        <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />
+                                        Speaking...
+                                    </motion.span>
+                                )}
+                            </div>
 
-                        {isVoiceMode ? (
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.3, duration: 0.6 }}
-                                className="w-full text-center"
-                            >
-                                <div className="mb-8">
+                            {/* Question */}
+                            <h2 className="text-3xl md:text-4xl leading-snug mb-12" style={{ fontFamily: 'var(--font-serif)' }}>
+                                {currentQuestion.question}
+                            </h2>
+
+                            {/* Voice mode */}
+                            {isVoiceMode ? (
+                                <div className="flex flex-col items-center gap-6">
                                     {transcriptionStatus === 'processing' ? (
-                                        <div className="flex flex-col items-center gap-6">
-                                            <div className="w-32 h-32 bg-[#1A1A1A] rounded-full flex items-center justify-center animate-pulse">
-                                                <span className="text-6xl">✦</span>
+                                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                                            <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center"
+                                                style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                                                <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+                                                    style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
                                             </div>
-                                            <p className="text-xl font-bold">Transcribing your answer...</p>
-                                            <p className="text-sm opacity-40">Processing via ElevenLabs</p>
-                                        </div>
+                                            <p className="text-sm" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Transcribing...</p>
+                                        </motion.div>
                                     ) : isRecording ? (
-                                        <div className="flex flex-col items-center gap-6">
-                                            <div className="w-32 h-32 bg-red-500 rounded-full animate-pulse flex items-center justify-center">
-                                                <span className="text-6xl">🎤</span>
-                                            </div>
-                                            <p className="text-xl font-bold">Recording...</p>
-                                            <button
+                                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                                            <motion.div
+                                                className="w-20 h-20 rounded-full mx-auto mb-6 cursor-pointer flex items-center justify-center"
+                                                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)' }}
+                                                animate={{ boxShadow: ['0 0 0 0 rgba(239,68,68,0.2)', '0 0 0 20px rgba(239,68,68,0)', '0 0 0 0 rgba(239,68,68,0)'] }}
+                                                transition={{ duration: 1.5, repeat: Infinity }}
                                                 onClick={stopRecording}
-                                                className="px-12 py-4 bg-[#1A1A1A] text-[#EAE7DE] text-lg font-bold rounded-full hover:scale-105 transition-all"
                                             >
-                                                ⏹ Stop Recording
-                                            </button>
-                                        </div>
+                                                <div className="w-6 h-6 rounded-sm" style={{ background: '#EF4444' }} />
+                                            </motion.div>
+                                            <p className="text-sm mb-1" style={{ color: '#F87171', fontFamily: 'var(--font-sans)', fontWeight: 500 }}>Recording</p>
+                                            <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>Click to stop</p>
+                                        </motion.div>
                                     ) : (
-                                        <div className="flex flex-col items-center gap-6">
-                                            <div className="w-32 h-32 bg-[#1A1A1A] rounded-full flex items-center justify-center hover:scale-105 transition-all cursor-pointer"
-                                                onClick={startRecording}>
-                                                <span className="text-6xl">🎤</span>
-                                            </div>
-                                            <button
+                                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                                            <motion.button
                                                 onClick={startRecording}
-                                                disabled={isLoading}
-                                                className="px-12 py-4 bg-[#1A1A1A] text-[#EAE7DE] text-lg font-bold rounded-full hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                                                disabled={isLoading || isPlayingAudio}
+                                                whileHover={{ scale: 1.05 }}
+                                                whileTap={{ scale: 0.95 }}
+                                                className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center disabled:opacity-40 transition-all"
+                                                style={{ background: 'linear-gradient(135deg, #7C6FF7, #4F9EF8)', boxShadow: '0 0 40px rgba(124,111,247,0.3)' }}
                                             >
-                                                🎤 Start Recording Answer
-                                            </button>
-                                            <button
-                                                onClick={() => navigate('/dashboard')}
-                                                className="px-8 py-3 border-2 border-[#1A1A1A] text-[#1A1A1A] rounded-full hover:bg-[#1A1A1A] hover:text-[#EAE7DE] transition-all"
-                                            >
-                                                Exit Interview
-                                            </button>
-                                        </div>
+                                                <svg width="28" height="28" fill="white" viewBox="0 0 24 24">
+                                                    <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 15a7 7 0 0 0 7-7h2a9 9 0 0 1-8 8.94V21h-2v-3.06A9 9 0 0 1 3 9h2a7 7 0 0 0 7 7z"/>
+                                                </svg>
+                                            </motion.button>
+                                            <p className="text-sm" style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                                                {isPlayingAudio ? 'Listen to the question first...' : 'Tap to answer'}
+                                            </p>
+                                        </motion.div>
                                     )}
+
+                                    <button onClick={() => navigate('/dashboard')} className="text-xs mt-4"
+                                        style={{ color: 'var(--muted)', fontFamily: 'var(--font-sans)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                        Exit interview
+                                    </button>
                                 </div>
-                            </motion.div>
-                        ) : (
-                            <motion.form
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.3, duration: 0.6 }}
-                                onSubmit={handleSubmitAnswer}
-                                className="w-full"
-                            >
-                                <div className="relative group mb-8">
-                                    <div className="absolute -inset-1 bg-gradient-to-r from-gray-200 to-gray-300 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                            ) : (
+                                /* Text mode */
+                                <form onSubmit={handleSubmitAnswer} className="space-y-4">
                                     <textarea
                                         value={answer}
-                                        onChange={(e) => setAnswer(e.target.value)}
-                                        placeholder="Type your answer here..."
-                                        className="relative w-full h-[220px] bg-[#F4F1E8] p-6 text-base font-sans rounded-xl border border-[#D1D1D1] focus:border-[#1A1A1A] focus:outline-none focus:ring-1 focus:ring-[#1A1A1A] resize-none transition-all shadow-sm placeholder:opacity-30"
+                                        onChange={e => setAnswer(e.target.value)}
                                         required
                                         disabled={isLoading}
+                                        placeholder="Type your answer..."
+                                        rows={7}
+                                        style={{
+                                            background: 'var(--surface)',
+                                            border: '1px solid var(--border)',
+                                            borderRadius: '16px',
+                                            color: 'var(--text)',
+                                            fontFamily: 'var(--font-sans)',
+                                            fontSize: '15px',
+                                            lineHeight: '1.7',
+                                            padding: '20px',
+                                            width: '100%',
+                                            resize: 'none',
+                                            outline: 'none',
+                                        }}
+                                        onFocus={e => e.target.style.borderColor = 'rgba(124,111,247,0.4)'}
+                                        onBlur={e => e.target.style.borderColor = 'var(--border)'}
                                     />
-                                </div>
-
-                                <div className="flex justify-center gap-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => navigate('/dashboard')}
-                                        className="px-8 py-4 border-2 border-[#1A1A1A] text-[#1A1A1A] text-lg font-sans font-bold rounded-full hover:bg-[#1A1A1A] hover:text-[#EAE7DE] transition-all"
-                                        disabled={isLoading}
-                                    >
-                                        Exit Interview
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading || !answer.trim()}
-                                        className="px-12 py-4 bg-[#1A1A1A] text-[#EAE7DE] text-lg font-sans font-bold rounded-full hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
-                                    >
-                                        {isLoading ? (
-                                            <>
-                                                <span className="w-5 h-5 border-2 border-[#EAE7DE] border-t-transparent rounded-full animate-spin"></span>
-                                                Submitting...
-                                            </>
-                                        ) : (
-                                            "Next Question →"
-                                        )}
-                                    </button>
-                                </div>
-                            </motion.form>
-                        )}
-                    </>
-                ) : null}
+                                    <div className="flex gap-3">
+                                        <button type="button" onClick={() => navigate('/dashboard')}
+                                            className="px-6 py-3 rounded-xl text-sm font-medium"
+                                            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--muted)', fontFamily: 'var(--font-sans)' }}>
+                                            Exit
+                                        </button>
+                                        <button type="submit" disabled={isLoading || !answer.trim()}
+                                            className="flex-1 py-3 rounded-xl text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+                                            style={{ background: 'linear-gradient(135deg, #7C6FF7, #4F9EF8)', color: '#fff', fontFamily: 'var(--font-sans)' }}>
+                                            {isLoading ? (
+                                                <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                                                    style={{ borderColor: 'rgba(255,255,255,0.5)', borderTopColor: 'transparent' }} />
+                                            ) : 'Next →'}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>
             </main>
-
-            {/* Decorative background elements */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vh] h-[120vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vh] h-[80vh] border border-[#1A1A1A] opacity-[0.03] rounded-full pointer-events-none"></div>
         </div>
     );
 };
