@@ -25,6 +25,9 @@ HireSignal is an AI-powered mock interview simulator. A user signs in, pastes a 
 
 ```
 HireSignal/
+├── docker-compose.yml          # EC2 production: nginx + backend containers
+├── nginx/
+│   └── nginx.conf              # Reverse proxy: /api/ and /socket.io/ → backend:3000
 ├── frontend/
 │   └── src/
 │       ├── api.js              # Central fetch helper — attaches auth token to every request
@@ -453,3 +456,77 @@ The backend keeps one timer per active session in a `Map<sessionId, setInterval>
    → returns array of past interviews
    → ProfilePage renders expandable cards with evaluation + Q&A
 ```
+
+---
+
+## Deployment
+
+### Production Architecture
+
+```
+Browser
+  │
+  ├─── HTTPS (static assets) ──→  Vercel CDN  (React SPA)
+  │                                     │
+  │                              VITE_API_URL
+  │                                     │
+  └─── HTTPS (API + WebSocket) ──→  EC2 Instance
+                                        │
+                                   nginx container (port 80/443)
+                                        │
+                                   /api/*  →  backend container (port 3000)
+                                   /socket.io/*  →  backend container (port 3000)
+```
+
+### Frontend — Vercel
+
+The React app is a static SPA. After `vite build`, it's just HTML/JS/CSS — no server required. Vercel hosts the static output and handles CDN, SSL, and deployments automatically.
+
+- Connect the GitHub repo to Vercel, set **Root Directory** to `frontend`
+- Set environment variables in the Vercel dashboard (these are baked in at build time):
+  - `VITE_API_URL` — the public backend URL (e.g. `https://api.hiresignal.com`)
+  - `VITE_FIREBASE_*` — all Firebase client config values
+- Vercel rebuilds and deploys on every push to `main` that touches `frontend/`
+
+### Backend — EC2 + Docker
+
+Two containers run on the EC2 instance managed by `docker-compose.yml`:
+
+| Container | Image | Role |
+|-----------|-------|------|
+| `nginx` | `nginx:stable-alpine` | Public-facing reverse proxy on ports 80/443 |
+| `backend` | Built from `./backend/Dockerfile` | Node.js API, exposed internally only |
+
+The `backend` container uses `expose: 3000` (not `ports:`), so it is never directly reachable from the internet — all traffic flows through nginx.
+
+**`nginx/nginx.conf`** routes:
+- `GET|POST /api/*` → `http://backend:3000` (REST API)
+- `GET /socket.io/*` → `http://backend:3000` with WebSocket upgrade headers
+
+**To deploy a backend change manually:**
+```bash
+git pull origin main
+docker compose up -d --build backend
+```
+
+### CORS
+
+The backend reads `ALLOWED_ORIGIN` from `.env` and sets it as the allowed CORS origin. This must match the Vercel deployment URL exactly:
+
+```
+ALLOWED_ORIGIN=https://your-app.vercel.app
+```
+
+### Local Development
+
+`docker-compose up` is not used locally for the frontend — run it with Vite directly:
+
+```bash
+# Terminal 1
+cd backend && npm run dev      # Express on :3000
+
+# Terminal 2
+cd frontend && npm run dev     # Vite on :5173
+```
+
+`VITE_API_URL` should be empty or unset locally so API calls go to the same origin via the Vite dev proxy (if configured), or set to `http://localhost:3000` to hit the backend directly.

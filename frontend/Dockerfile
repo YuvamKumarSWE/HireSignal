@@ -28,9 +28,8 @@ ENV VITE_FIREBASE_MEASUREMENT_ID=$VITE_FIREBASE_MEASUREMENT_ID
 
 RUN npm run build
 
-# --- Serve stage ---
+# --- Serve stage (local dev only — production uses Vercel) ---
 FROM nginx:stable-alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
