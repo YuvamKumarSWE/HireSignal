@@ -6,6 +6,7 @@ import interviewRoutes from "./routes/interview.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import { initFirebase } from "./config/firebase.js";
 import { requireAuth } from "./middleware/auth.middleware.js";
+import { register } from "./metrics.js";
 
 dotenv.config();
 initFirebase();
@@ -24,6 +25,12 @@ app.use("/api/interview", requireAuth, interviewRoutes);
 // Health check
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
+});
+
+// Prometheus metrics
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", register.contentType);
+  res.end(await register.metrics());
 });
 
 // Error handler

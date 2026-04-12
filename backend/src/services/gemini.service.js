@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { geminiLatency } from "../metrics.js";
 
 export async function evaluateWithGemini({ transcript, role, level }) {
   const API_KEY = process.env.GEMINI_API_KEY;
@@ -10,6 +11,7 @@ export async function evaluateWithGemini({ transcript, role, level }) {
 
   const prompt = buildEvaluationPrompt({ transcript, role, level });
 
+  const end = geminiLatency.startTimer({ operation: 'evaluate' });
   try {
     console.log("CALLING GEMINI API");
     const genAI = new GoogleGenerativeAI(API_KEY);
@@ -21,8 +23,10 @@ export async function evaluateWithGemini({ transcript, role, level }) {
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
+    end();
     return JSON.parse(text);
   } catch (error) {
+    end();
     console.error("Gemini API error:", error);
     console.warn("Using mock evaluation as fallback");
     return getMockEvaluation();

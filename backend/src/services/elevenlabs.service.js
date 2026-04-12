@@ -1,4 +1,5 @@
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
+import { elevenLabsTTSLatency, elevenLabsSTTLatency } from '../metrics.js';
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
@@ -80,6 +81,7 @@ function getElevenLabsClient() {
  * @returns {Buffer} Audio buffer
  */
 export async function textToSpeech(text, voiceId = DEFAULT_VOICE_ID) {
+  const end = elevenLabsTTSLatency.startTimer();
   try {
     const client = getElevenLabsClient();
     
@@ -100,8 +102,10 @@ export async function textToSpeech(text, voiceId = DEFAULT_VOICE_ID) {
       chunks.push(value);
     }
     
+    end();
     return Buffer.concat(chunks);
   } catch (error) {
+    end();
     console.error('ElevenLabs TTS Error:', error);
     throw new Error('Failed to convert text to speech');
   }
@@ -114,6 +118,7 @@ export async function textToSpeech(text, voiceId = DEFAULT_VOICE_ID) {
  * @returns {string} Transcribed text
  */
 export async function speechToText(audioBuffer, languageCode = null) {
+  const end = elevenLabsSTTLatency.startTimer();
   try {
     const elevenlabs = getElevenLabsClient();
     
@@ -129,8 +134,10 @@ export async function speechToText(audioBuffer, languageCode = null) {
     });
 
     // Extract the transcription text
+    end();
     return transcription.text || '';
   } catch (error) {
+    end();
     console.error('ElevenLabs Speech to Text Error:', error.response?.data || error.message);
     throw new Error('Failed to convert speech to text');
   }

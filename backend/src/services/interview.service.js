@@ -1,6 +1,7 @@
 import { getRandomVoice } from './elevenlabs.service.js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getFirestore } from '../config/firebase.js';
+import { interviewsStarted, interviewsCompleted, activeSessions, geminiLatency } from '../metrics.js';
 
 // In-memory store keeps sessions alive during the interview
 const interviewSessions = new Map();
@@ -86,6 +87,7 @@ Return ONLY valid JSON in this exact format:
 Make questions natural and conversational. Include the question text only, no additional instructions.
 `;
 
+  const end = geminiLatency.startTimer({ operation: 'generate_questions' });
   try {
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({
@@ -96,8 +98,10 @@ Make questions natural and conversational. Include the question text only, no ad
     const result = await model.generateContent(prompt);
     const text = result.response.text();
     const parsed = JSON.parse(text);
+    end();
     return parsed.questions || [];
   } catch (e) {
+    end();
     console.error("Gemini API error:", e);
     console.log("⚠️  Using mock questions as fallback");
     return MOCK_QUESTIONS;
@@ -132,6 +136,8 @@ export async function createInterviewSession(jobSpec, userId) {
   };
   
   interviewSessions.set(sessionId, session);
+  interviewsStarted.inc();
+  activeSessions.inc();
 
   // Persist to Firestore
   const db = getFirestore();
@@ -304,6 +310,8 @@ export async function endInterviewSession(sessionId, evaluation) {
   const completedAt = new Date();
   session.status = 'completed';
   session.completedAt = completedAt;
+  interviewsCompleted.inc();
+  activeSessions.dec();
 
   // Persist completed session + evaluation to Firestore
   const db = getFirestore();
